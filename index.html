@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flex Rate Energy Graph</title>
+    <style>
+      :root {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 1.5rem;
+        background: #f6f8fa;
+        color: #1f2937;
+      }
+      .card {
+        max-width: 1050px;
+        margin: 0 auto;
+        background: #fff;
+        border: 1px solid #d0d7de;
+        border-radius: 10px;
+        padding: 1rem 1rem 1.25rem;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+        margin-bottom: 0.75rem;
+      }
+      .controls label {
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+      .controls select {
+        margin-left: 0.35rem;
+        padding: 0.25rem 0.4rem;
+      }
+      svg {
+        width: 100%;
+        height: 420px;
+        display: block;
+      }
+      .legend {
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.5rem;
+        flex-wrap: wrap;
+        font-size: 0.85rem;
+      }
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .swatch {
+        width: 0.8rem;
+        height: 0.8rem;
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Energy Usage by Cost Tier</h1>
+      <div class="controls">
+        <label for="range-select"
+          >X range
+          <select id="range-select">
+            <option value="billingMonth" selected>Billing month</option>
+            <option value="sevenDay">7 day</option>
+            <option value="day">Day</option>
+          </select>
+        </label>
+        <label for="y-axis-select"
+          >Y axis
+          <select id="y-axis-select">
+            <option value="cost" selected>$</option>
+            <option value="kwh">kWh</option>
+          </select>
+        </label>
+      </div>
+      <svg id="chart" role="img" aria-label="Stacked bar chart for energy tiers"></svg>
+      <div id="legend" class="legend"></div>
+    </div>
+    <script>
+      const tiers = [
+        { key: "peak", label: "Peak", rate: 0.32, color: "#b91c1c" },
+        { key: "offPeak", label: "Off-peak", rate: 0.18, color: "#ea580c" },
+        { key: "superOffPeak", label: "Super-off-peak", rate: 0.1, color: "#2563eb" },
+      ].sort((a, b) => b.rate - a.rate);
+
+      const dataByRange = {
+        billingMonth: [
+          { label: "Jan", peak: 130, offPeak: 210, superOffPeak: 170 },
+          { label: "Feb", peak: 122, offPeak: 195, superOffPeak: 165 },
+          { label: "Mar", peak: 118, offPeak: 188, superOffPeak: 172 },
+          { label: "Apr", peak: 140, offPeak: 220, superOffPeak: 190 },
+          { label: "May", peak: 155, offPeak: 238, superOffPeak: 210 },
+          { label: "Jun", peak: 162, offPeak: 245, superOffPeak: 218 },
+        ],
+        sevenDay: [
+          { label: "Mon", peak: 14, offPeak: 28, superOffPeak: 23 },
+          { label: "Tue", peak: 16, offPeak: 25, superOffPeak: 20 },
+          { label: "Wed", peak: 13, offPeak: 26, superOffPeak: 22 },
+          { label: "Thu", peak: 17, offPeak: 29, superOffPeak: 21 },
+          { label: "Fri", peak: 18, offPeak: 30, superOffPeak: 22 },
+          { label: "Sat", peak: 20, offPeak: 34, superOffPeak: 29 },
+          { label: "Sun", peak: 19, offPeak: 32, superOffPeak: 27 },
+        ],
+        day: [
+          { label: "00", peak: 0.2, offPeak: 0.9, superOffPeak: 0.6 },
+          { label: "04", peak: 0.3, offPeak: 1.1, superOffPeak: 0.8 },
+          { label: "08", peak: 0.7, offPeak: 1.3, superOffPeak: 0.6 },
+          { label: "12", peak: 1.5, offPeak: 1.1, superOffPeak: 0.3 },
+          { label: "16", peak: 1.8, offPeak: 1.0, superOffPeak: 0.2 },
+          { label: "20", peak: 1.2, offPeak: 1.2, superOffPeak: 0.4 },
+        ],
+      };
+
+      const chart = document.getElementById("chart");
+      const legend = document.getElementById("legend");
+      const rangeSelect = document.getElementById("range-select");
+      const yAxisSelect = document.getElementById("y-axis-select");
+
+      const toMetricValue = (row, tier, yAxis) => (yAxis === "cost" ? row[tier.key] * tier.rate : row[tier.key]);
+      const yUnit = (yAxis) => (yAxis === "cost" ? "$" : "kWh");
+
+      function drawLegend() {
+        legend.innerHTML = "";
+        tiers.forEach((tier) => {
+          const item = document.createElement("span");
+          item.className = "legend-item";
+          item.innerHTML = `<span class="swatch" style="background:${tier.color}"></span>${tier.label} (${tier.rate.toFixed(2)}/kWh)`;
+          legend.appendChild(item);
+        });
+      }
+
+      function renderChart() {
+        const points = dataByRange[rangeSelect.value];
+        const yAxis = yAxisSelect.value;
+        const width = 1000;
+        const height = 420;
+        const margin = { top: 20, right: 12, bottom: 60, left: 68 };
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+        const barGap = 14;
+        const barWidth = Math.max(12, Math.min(80, (plotWidth - barGap * (points.length - 1)) / points.length));
+        const totals = points.map((row) => tiers.reduce((acc, tier) => acc + toMetricValue(row, tier, yAxis), 0));
+        const maxY = Math.max(...totals) * 1.1;
+        const scaleY = (v) => margin.top + plotHeight - (v / maxY) * plotHeight;
+        const tickCount = 5;
+
+        let svg = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
+        svg += `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + plotHeight}" stroke="#6b7280" />`;
+        svg += `<line x1="${margin.left}" y1="${margin.top + plotHeight}" x2="${margin.left + plotWidth}" y2="${margin.top + plotHeight}" stroke="#6b7280" />`;
+
+        for (let t = 0; t <= tickCount; t++) {
+          const v = (maxY / tickCount) * t;
+          const y = scaleY(v);
+          const label = yAxis === "cost" ? `$${v.toFixed(2)}` : `${v.toFixed(1)}`;
+          svg += `<line x1="${margin.left}" y1="${y}" x2="${margin.left + plotWidth}" y2="${y}" stroke="#e5e7eb" />`;
+          svg += `<text x="${margin.left - 8}" y="${y + 4}" text-anchor="end" fill="#4b5563" font-size="11">${label}</text>`;
+        }
+
+        points.forEach((row, i) => {
+          const x = margin.left + i * (barWidth + barGap);
+          let accumulated = 0;
+
+          tiers.forEach((tier) => {
+            const value = toMetricValue(row, tier, yAxis);
+            const yTop = scaleY(accumulated + value);
+            const yBottom = scaleY(accumulated);
+            const h = yBottom - yTop;
+            svg += `<rect x="${x}" y="${yTop}" width="${barWidth}" height="${h}" fill="${tier.color}"><title>${row.label} • ${tier.label}: ${value.toFixed(2)} ${yUnit(yAxis)}</title></rect>`;
+            accumulated += value;
+          });
+
+          const labelX = x + barWidth / 2;
+          svg += `<text x="${labelX}" y="${margin.top + plotHeight + 18}" text-anchor="middle" fill="#4b5563" font-size="11">${row.label}</text>`;
+        });
+
+        svg += `<text x="16" y="${margin.top + plotHeight / 2}" transform="rotate(-90 16 ${margin.top + plotHeight / 2})" fill="#374151" font-size="12">${yUnit(yAxis)}</text>`;
+        svg += `</svg>`;
+        chart.innerHTML = svg;
+      }
+
+      rangeSelect.addEventListener("change", renderChart);
+      yAxisSelect.addEventListener("change", renderChart);
+      drawLegend();
+      renderChart();
+    </script>
+  </body>
+</html>
